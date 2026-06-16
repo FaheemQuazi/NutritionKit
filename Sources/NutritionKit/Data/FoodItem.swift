@@ -1,7 +1,7 @@
 
 import Foundation
 
-public struct FoodItem {
+public struct FoodItem: Sendable {
     /// The name of this product.
     var productName: String?
     

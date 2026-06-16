@@ -1,7 +1,7 @@
 
 import Foundation
 
-public enum LabelLanguage: String, Codable, Hashable {
+public enum LabelLanguage: String, Codable, Hashable, Sendable {
     case english, german
 }
 
@@ -133,13 +133,13 @@ public extension KnownLabel {
         // English
         keywords[.english] = []
         for (_, spellings) in NutritionItem.knownLabelsEnglish {
-            keywords[.english]?.insert(contentsOf: spellings)
+            keywords[.english]?.formUnion(spellings)
         }
-        
+
         // German
         keywords[.german] = []
         for (_, spellings) in NutritionItem.knownLabelsGerman {
-            keywords[.german]?.insert(contentsOf: spellings)
+            keywords[.german]?.formUnion(spellings)
         }
         
         return keywords

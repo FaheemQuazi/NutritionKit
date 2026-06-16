@@ -263,28 +263,26 @@ public struct USNutritionLabelView: View {
     }
 }
 
-struct USNutritionLabelView_Previews: PreviewProvider {
-    static var previews: some View {
-        USNutritionLabelView(label: .init(language: .english,
-                                          servingSize: .amount(amount: .solid(milligrams: 50_000)),
-                                          nutritionFacts: [
-                                            .calories: .energy(kcal: 350),
-                                            .caloriesFromFat: .energy(kcal: 75),
-                                            .fat: .solid(milligrams: 12_000),
-                                            .saturatedFat: .solid(milligrams: 3_000),
-                                            .transFat: .solid(milligrams: 0),
-                                            .cholesterol: .solid(milligrams: 10),
-                                            .sodium: .solid(milligrams: 100),
-                                            .carbohydrates: .solid(milligrams: 10_000),
-                                            .sugar: .solid(milligrams: 5_000),
-                                            .dietaryFiber: .solid(milligrams: 3_000),
-                                            .protein: .solid(milligrams: 12_000),
-                                            .calcium: .solid(milligrams: 100),
-                                            .vitaminC: .dailyValue(percentage: 35),
-                                            .magnesium: .solid(milligrams: 100),
-                                          ]),
-                             language: .english)
-        .frame(width: UIScreen.main.bounds.width * 0.8)
-        .preferredColorScheme(.dark)
-    }
+#Preview {
+    USNutritionLabelView(label: .init(language: .english,
+                                      servingSize: .amount(amount: .solid(milligrams: 50_000)),
+                                      nutritionFacts: [
+                                        .calories: .energy(kcal: 350),
+                                        .caloriesFromFat: .energy(kcal: 75),
+                                        .fat: .solid(milligrams: 12_000),
+                                        .saturatedFat: .solid(milligrams: 3_000),
+                                        .transFat: .solid(milligrams: 0),
+                                        .cholesterol: .solid(milligrams: 10),
+                                        .sodium: .solid(milligrams: 100),
+                                        .carbohydrates: .solid(milligrams: 10_000),
+                                        .sugar: .solid(milligrams: 5_000),
+                                        .dietaryFiber: .solid(milligrams: 3_000),
+                                        .protein: .solid(milligrams: 12_000),
+                                        .calcium: .solid(milligrams: 100),
+                                        .vitaminC: .dailyValue(percentage: 35),
+                                        .magnesium: .solid(milligrams: 100),
+                                      ]),
+                         language: .english)
+    .frame(width: 320)
+    .preferredColorScheme(.dark)
 }

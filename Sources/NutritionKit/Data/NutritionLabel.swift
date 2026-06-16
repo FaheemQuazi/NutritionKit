@@ -1,7 +1,7 @@
 
 import Foundation
 
-public struct NutritionLabel {
+public struct NutritionLabel: Sendable {
     /// The language of the label.
     let language: LabelLanguage
     
@@ -12,7 +12,7 @@ public struct NutritionLabel {
     var nutritionFacts: [NutritionItem: NutritionAmount]
 }
 
-public enum KnownLabel: String, CaseIterable {
+public enum KnownLabel: String, CaseIterable, Sendable {
     /// The nutriition facts headline.
     case nutritionFacts
     

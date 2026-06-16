@@ -1,8 +1,7 @@
 
 import Foundation
-import Toolbox
 
-public enum NutritionAmount {
+public enum NutritionAmount: Sendable {
     /// An unspecified unit.
     case unitless(value: Double)
     
@@ -19,7 +18,7 @@ public enum NutritionAmount {
     case dailyValue(percentage: Int)
 }
 
-public enum ServingSize {
+public enum ServingSize: Sendable {
     /// A serving size determined by an absolute amount.
     case amount(amount: NutritionAmount)
     
@@ -30,7 +29,7 @@ public enum ServingSize {
     case absoluteValue(value: Double, unit: String?)
 }
 
-public enum MeasurementUnit: String, CaseIterable {
+public enum MeasurementUnit: String, CaseIterable, Sendable {
     /// Solid units
     case gram
     case milligram
@@ -128,7 +127,7 @@ extension NutritionAmount: CustomStringConvertible {
             return "\(Int(kcal)) kcal"
         case .solid(let milligrams):
             if case .macronutrient = fact.category, milligrams >= 100 {
-                return "\(FormatToolbox.format(milligrams/1000, decimalPlaces: 1, minDecimalPlaces: 0))g"
+                return "\(NumberFormatting.format(milligrams/1000, decimalPlaces: 1, minDecimalPlaces: 0))g"
             }
             
             if milligrams < 1 && milligrams != 0 {
@@ -353,6 +352,12 @@ extension ServingSize: Codable {
     public enum CodingKeys: String, CodingKey {
         case amount, container, absoluteValue
     }
+
+    /// Wire representation for the associated values of the `absoluteValue` case.
+    private struct AbsoluteValuePayload: Codable {
+        let value: Double
+        let unit: String?
+    }
     
     public var codingKey: CodingKeys {
         switch self {
@@ -370,7 +375,7 @@ extension ServingSize: Codable {
         case .container(let percentage):
             try container.encode(percentage, forKey: .container)
         case .absoluteValue(let value, let unit):
-            try container.encodeValues(value, unit, for: .absoluteValue)
+            try container.encode(AbsoluteValuePayload(value: value, unit: unit), forKey: .absoluteValue)
         }
     }
     
@@ -384,8 +389,8 @@ extension ServingSize: Codable {
             let percentage = try container.decode(Double.self, forKey: .container)
             self = .container(percentage: percentage)
         case .absoluteValue:
-            let (value, unit): (Double, Optional<String>) = try container.decodeValues(for: .absoluteValue)
-            self = .absoluteValue(value: value, unit: unit)
+            let payload = try container.decode(AbsoluteValuePayload.self, forKey: .absoluteValue)
+            self = .absoluteValue(value: payload.value, unit: payload.unit)
         default:
             throw DecodingError.dataCorrupted(
                 DecodingError.Context(
