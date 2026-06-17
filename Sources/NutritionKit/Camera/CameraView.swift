@@ -1,178 +1,147 @@
 
 import AVFoundation
-import Combine
-import Panorama
+import CoreImage
 import SwiftUI
-import Toolbox
+import Vision
 
-internal final class CameraViewController: UIViewController, NutritionCameraDelegate {
-    let onBarcodeRead: Optional<(String, [CGPoint]) -> Void>
-    let onImageUpdated: Optional<(UIImage, CVPixelBuffer) -> Void>
-    
-    init(onBarcodeRead: Optional<(String, [CGPoint]) -> Void> = nil,
-         onImageUpdated: Optional<(UIImage, CVPixelBuffer) -> Void> = nil) {
-        self.onBarcodeRead = onBarcodeRead
-        self.onImageUpdated = onImageUpdated
-        
-        super.init(nibName: nil, bundle: nil)
+// MARK: - Preview
+
+/// A SwiftUI wrapper around `AVCaptureVideoPreviewLayer`.
+struct CameraPreview: UIViewRepresentable {
+    let session: AVCaptureSession
+
+    func makeUIView(context: Context) -> PreviewUIView {
+        let view = PreviewUIView()
+        view.previewLayer.session = session
+        view.previewLayer.videoGravity = .resizeAspectFill
+        return view
     }
-    
-    required init?(coder: NSCoder) {
-        return nil
-    }
-    
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        self.initialize()
-    }
-    
-    override func viewDidDisappear(_ animated: Bool) {
-        CameraManager.shared.stopSession(for: self)
-    }
-    
-    func initialize() {
-        let cameraPreviewLayer = CameraManager.shared.previewLayer
-        cameraPreviewLayer.frame = self.view.frame
-        
-        self.view.layer.insertSublayer(cameraPreviewLayer, at: 0)
-        CameraManager.shared.startSession(for: self)
-    }
-    
-    var id: ObjectIdentifier {
-        .init(self)
-    }
-    
-    func cameraImageUpdated(imageBuffer: CMSampleBuffer) {
-        guard let onImageUpdated = self.onImageUpdated else {
-            return
-        }
-        
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(imageBuffer) else {
-            return
-        }
-        
-        guard var uiImage = UIImage(pixelBuffer: pixelBuffer) else {
-            return
-        }
-        
-        uiImage = UIImage.rotateSnapshotImage(from: uiImage) ?? uiImage
-        uiImage = CameraManager.cropOutputImage(uiImage) ?? uiImage
-        
-        onImageUpdated(uiImage, pixelBuffer)
-    }
-    
-    func barcodeDetected(data: String, corners: [CGPoint]) {
-        self.onBarcodeRead?(data, corners)
+
+    func updateUIView(_ uiView: PreviewUIView, context: Context) {
+        uiView.previewLayer.session = session
     }
 }
 
-internal struct CameraLiveView: UIViewControllerRepresentable {
-    /// The camera controller.
-    let controller: CameraViewController
-    
-    func makeUIViewController(context: Context) -> CameraViewController {
-        self.controller
+final class PreviewUIView: UIView {
+    override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
+
+    var previewLayer: AVCaptureVideoPreviewLayer {
+        // swiftlint:disable:next force_cast
+        layer as! AVCaptureVideoPreviewLayer
     }
-    
-    func updateUIViewController(_ uiViewController: CameraViewController,
-                                context: UIViewControllerRepresentableContext<CameraLiveView>) { }
 }
 
-internal struct AnyCameraView<Content: View>: View {
-    /// The camera manager.
-    @ObservedObject var cameraManager: CameraManager
-    
-    /// The camera controller.
-    let controller: CameraViewController
-    
-    /// The view to display above the camera feed.
-    let cameraViewOverlay: Content
-    
-    init(onBarcodeRead: Optional<(String, [CGPoint]) -> Void> = nil,
-         onImageUpdated: Optional<(UIImage, CVPixelBuffer) -> Void> = nil,
-         @ViewBuilder content: () -> Content) {
-        self.cameraManager = .shared
-        self.cameraViewOverlay = content()
-        self.controller = .init(onBarcodeRead: onBarcodeRead, onImageUpdated: onImageUpdated)
+// MARK: - Container
+
+/// Displays the live camera feed (once ready) with an overlay, handling the loading/error states.
+struct AnyCameraView<Overlay: View>: View {
+    /// The camera manager driving the feed.
+    let camera: CameraManager
+
+    /// The overlay shown above the feed.
+    let overlay: Overlay
+
+    init(camera: CameraManager, @ViewBuilder overlay: () -> Overlay) {
+        self.camera = camera
+        self.overlay = overlay()
     }
-    
-    var uninitializedView: some View {
-        Rectangle().fill(Color.black)
-    }
-    
-    func errorView(_ error: CameraManager.CameraManagerError) -> some View {
+
+    private func errorView(_ error: CameraManager.CameraManagerError) -> some View {
         ZStack {
             Rectangle().fill(Color.black)
-            
-            VStack {
-                Text(verbatim: error.rawValue)
-                    .font(.body)
-                    .foregroundColor(.white)
-                    .multilineTextAlignment(.center)
-                    .padding()
-            }
+            Text(verbatim: error.rawValue)
+                .font(.body)
+                .foregroundColor(.white)
+                .multilineTextAlignment(.center)
+                .padding()
         }
     }
-    
-    var readyView: some View {
-        CameraLiveView(controller: self.controller)
-            .overlay {
-                self.cameraViewOverlay
-            }
-    }
-    
+
     var body: some View {
         ZStack {
-            switch cameraManager.status {
-            case .uninitialized:
-                uninitializedView
-            case .unauthorized:
-                uninitializedView
-            case .authorized:
-                uninitializedView
+            switch camera.status {
+            case .ready:
+                CameraPreview(session: camera.session)
+                    .overlay { overlay }
             case .error(let error):
                 errorView(error)
-            case .ready:
-                readyView
+            case .uninitialized, .unauthorized, .authorized:
+                Rectangle().fill(Color.black)
             }
         }
-        .edgesIgnoringSafeArea(.all)
+        .ignoresSafeArea()
     }
 }
 
-public typealias CameraRect = AnimatableTuple4<CGPoint, CGPoint, CGPoint, CGPoint>
+// MARK: - Vision helpers
+
+/// Converts camera pixel buffers into images for Vision processing.
+enum CameraImage {
+    // CIContext is thread-safe; sharing one avoids per-frame allocation.
+    static let ciContext = CIContext()
+
+    static func cgImage(from pixelBuffer: CVPixelBuffer) -> CGImage? {
+        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        return ciContext.createCGImage(ciImage, from: ciImage.extent)
+    }
+}
+
+/// Detects barcodes in camera frames using the Vision barcode request.
+enum BarcodeDetector {
+    /// Symbologies commonly found on packaged food products.
+    static let symbologies: [BarcodeSymbology] = [
+        .ean13, .ean8, .upce, .code128, .code39, .code93, .qr, .pdf417, .dataMatrix, .aztec,
+    ]
+
+    static func detect(in frame: CapturedFrame) async -> Barcode? {
+        var request = DetectBarcodesRequest()
+        request.symbologies = symbologies
+
+        guard let results = try? await request.perform(on: frame.pixelBuffer, orientation: frame.orientation) else {
+            return nil
+        }
+
+        guard let observation = results.first(where: { ($0.payloadString?.isEmpty == false) }),
+              let data = observation.payloadString else {
+            return nil
+        }
+
+        let corners = [observation.topLeft, observation.topRight, observation.bottomLeft, observation.bottomRight]
+            .map { CGPoint(x: $0.x, y: $0.y) }
+
+        return Barcode(data: data, corners: corners)
+    }
+}
+
+// MARK: - Cutout overlay shapes
 
 public struct CameraCutoutShape: Shape, Animatable {
     var points: CameraRect
-    
+
     public var animatableData: CameraRect {
-        get {
-            points
-        }
-        set {
-            points = newValue
-        }
+        get { points }
+        set { points = newValue }
     }
-    
+
     public func path(in rect: CGRect) -> Path {
         var path = Path()
-        
+
         path.addRect(rect)
         path.closeSubpath()
-        
+
         let topLeft = points.first
         let topRight = points.second
         let bottomLeft = points.third
         let bottomRight = points.fourth
-        
+
         path.move(to: .init(x: topLeft.x * rect.width, y: rect.height - topLeft.y * rect.height))
         path.addLine(to: .init(x: topRight.x * rect.width, y: rect.height - topRight.y * rect.height))
         path.addLine(to: .init(x: bottomRight.x * rect.width, y: rect.height - bottomRight.y * rect.height))
         path.addLine(to: .init(x: bottomLeft.x * rect.width, y: rect.height - bottomLeft.y * rect.height))
         path.addLine(to: .init(x: topLeft.x * rect.width, y: rect.height - topLeft.y * rect.height))
-        
+
         path.closeSubpath()
-        
+
         return path
     }
 }
@@ -180,57 +149,44 @@ public struct CameraCutoutShape: Shape, Animatable {
 public struct CameraCutoutStrokeShape: Shape, Animatable {
     let lineLength: CGFloat
     var points: CameraRect
-    
+
     public var animatableData: CameraRect {
-        get {
-            points
-        }
-        set {
-            points = newValue
-        }
+        get { points }
+        set { points = newValue }
     }
-    
+
     public func path(in rect: CGRect) -> Path {
         var path = Path()
-        
-        var topLeft = points.first
-        var topRight = points.second
-        var bottomLeft = points.third
-        var bottomRight = points.fourth
-        
-        topLeft = CGPoint(x: topLeft.x * rect.width, y: rect.height - topLeft.y * rect.height)
-        topRight = CGPoint(x: topRight.x * rect.width, y: rect.height - topRight.y * rect.height)
-        bottomLeft = CGPoint(x: bottomLeft.x * rect.width, y: rect.height - bottomLeft.y * rect.height)
-        bottomRight = CGPoint(x: bottomRight.x * rect.width, y: rect.height - bottomRight.y * rect.height)
-        
+
+        let topLeft = CGPoint(x: points.first.x * rect.width, y: rect.height - points.first.y * rect.height)
+        let topRight = CGPoint(x: points.second.x * rect.width, y: rect.height - points.second.y * rect.height)
+        let bottomLeft = CGPoint(x: points.third.x * rect.width, y: rect.height - points.third.y * rect.height)
+        let bottomRight = CGPoint(x: points.fourth.x * rect.width, y: rect.height - points.fourth.y * rect.height)
+
         // Top Left
         path.move(to: topLeft)
         path.addLine(to: topLeft + (topRight - topLeft).normalized * lineLength)
-        
         path.move(to: topLeft)
         path.addLine(to: topLeft + (bottomLeft - topLeft).normalized * lineLength)
-        
+
         // Top Right
         path.move(to: topRight)
         path.addLine(to: topRight + (topLeft - topRight).normalized * lineLength)
-        
         path.move(to: topRight)
         path.addLine(to: topRight + (bottomRight - topRight).normalized * lineLength)
-        
+
         // Bottom Left
         path.move(to: bottomLeft)
         path.addLine(to: bottomLeft + (topLeft - bottomLeft).normalized * lineLength)
-        
         path.move(to: bottomLeft)
         path.addLine(to: bottomLeft + (bottomRight - bottomLeft).normalized * lineLength)
-        
+
         // Bottom Right
         path.move(to: bottomRight)
         path.addLine(to: bottomRight + (topRight - bottomRight).normalized * lineLength)
-        
         path.move(to: bottomRight)
         path.addLine(to: bottomRight + (bottomLeft - bottomRight).normalized * lineLength)
-        
+
         return path
     }
 }
@@ -238,114 +194,35 @@ public struct CameraCutoutStrokeShape: Shape, Animatable {
 public struct DefaultCameraOverlayView: View {
     /// The current corner points.
     @Binding var rectangle: CameraRect
-    
+
+    public init(rectangle: Binding<CameraRect>) {
+        self._rectangle = rectangle
+    }
+
     /// The default cutout rect for barcode scanning.
-    static let defaultBarcodeCutoutRect: CameraRect = .init(
+    public static let defaultBarcodeCutoutRect = CameraRect(
         CGPoint(x: 0.15, y: 0.6),
         CGPoint(x: 0.85, y: 0.6),
         CGPoint(x: 0.15, y: 0.4),
         CGPoint(x: 0.85, y: 0.4)
     )
-    
+
     /// The default cutout rect for nutrition label scanning.
-    static let defaultLabelCutoutRect: CameraRect = .init(
+    public static let defaultLabelCutoutRect = CameraRect(
         CGPoint(x: 0.15, y: 0.8),
         CGPoint(x: 0.85, y: 0.8),
         CGPoint(x: 0.15, y: 0.2),
         CGPoint(x: 0.85, y: 0.2)
     )
-    
+
     public var body: some View {
         ZStack {
             CameraCutoutShape(points: rectangle)
                 .fill(Color.black, style: .init(eoFill: true))
                 .opacity(0.4)
-            
+
             CameraCutoutStrokeShape(lineLength: 15, points: rectangle)
                 .stroke(Color.white, style: .init(lineWidth: 5, lineCap: .round))
         }
-    }
-}
-
-internal extension UIScreen {
-    var orientation: UIInterfaceOrientation {
-        let point = coordinateSpace.convert(CGPoint.zero, to: fixedCoordinateSpace)
-        switch (point.x, point.y) {
-        case (0, 0):
-            return .portrait
-        case let (x, y) where x != 0 && y != 0:
-            return .portraitUpsideDown
-        case let (0, y) where y != 0:
-            return .landscapeLeft
-        case let (x, 0) where x != 0:
-            return .landscapeRight
-        default:
-            return .unknown
-        }
-    }
-}
-
-internal extension UIImage {
-    convenience init?(pixelBuffer: CVPixelBuffer) {
-        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        let context = CIContext()
-        let cgImage = context.createCGImage(ciImage, from: CGRect(x: 0, y: 0,
-                                                                  width: CVPixelBufferGetWidth(pixelBuffer),
-                                                                  height: CVPixelBufferGetHeight(pixelBuffer)))
-        
-        guard let cgImage else {
-            return nil
-        }
-        
-        self.init(cgImage: cgImage)
-    }
-    
-    func rotate(radians: Float) -> UIImage? {
-        var newSize = CGRect(origin: CGPoint.zero, size: self.size).applying(CGAffineTransform(rotationAngle: CGFloat(radians))).size
-        // Trim off the extremely small float value to prevent core graphics from rounding it up
-        newSize.width = floor(newSize.width)
-        newSize.height = floor(newSize.height)
-        
-        UIGraphicsBeginImageContextWithOptions(newSize, false, self.scale)
-        let context = UIGraphicsGetCurrentContext()!
-        
-        // Move origin to middle
-        context.translateBy(x: newSize.width/2, y: newSize.height/2)
-        // Rotate around middle
-        context.rotate(by: CGFloat(radians))
-        // Draw the image at its center
-        self.draw(in: CGRect(x: -self.size.width/2, y: -self.size.height/2, width: self.size.width, height: self.size.height))
-        
-        let newImage = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-        
-        return newImage
-    }
-    
-    /// Create a snapshot of this frame with the correct orientation.
-    static func rotateSnapshotImage(from rawPhoto: UIImage) -> UIImage? {
-        let rotationAngleDegrees: Float?
-        switch UIScreen.main.orientation {
-        case .portrait:
-            rotationAngleDegrees = 90
-        case .portraitUpsideDown:
-            rotationAngleDegrees = -90
-        case .landscapeLeft:
-            rotationAngleDegrees = 180
-        case .landscapeRight:
-            rotationAngleDegrees = nil
-        default:
-            rotationAngleDegrees = nil
-        }
-        
-        let finalPhoto: UIImage
-        if let rotationAngleDegrees = rotationAngleDegrees {
-            finalPhoto = rawPhoto.rotate(radians: rotationAngleDegrees * .deg2rad)!
-        }
-        else {
-            finalPhoto = rawPhoto
-        }
-        
-        return finalPhoto
     }
 }

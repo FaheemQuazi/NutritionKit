@@ -1,6 +1,7 @@
 
-import Toolbox
+import os
 
-extension Log {
-    static let nutritionKit = Logger(subsystem: "com.jonaszell.NutritionKit", category: "NutritionKit")
+extension Logger {
+    /// Shared logger for the NutritionKit framework.
+    static let nutritionKit = Logger(subsystem: "com.nutritionkit.NutritionKit", category: "NutritionKit")
 }

@@ -1,39 +1,46 @@
 
+import CoreGraphics
 import SwiftUI
-import Toolbox
 
-public struct Barcode: Codable, Hashable {
+public struct Barcode: Codable, Hashable, Sendable {
     /// The barcode data.
-    let data: String
-    
-    /// The corners of the barcode.
-    let corners: [CGPoint]
+    public let data: String
+
+    /// The corners of the barcode (normalized, Vision coordinate space).
+    public let corners: [CGPoint]
+
+    public init(data: String, corners: [CGPoint]) {
+        self.data = data
+        self.corners = corners
+    }
 }
 
+/// A view that shows the live camera feed and reports detected barcodes.
 public struct BarcodeScannerView: View {
-    /// The current barcode data.
+    /// The most recently detected barcode.
     @Binding var barcodeData: Barcode?
-    
-    /// The cutout rectangle.
-    @State var cameraRectangle: CameraRect = DefaultCameraOverlayView.defaultBarcodeCutoutRect
-    
+
+    @State private var camera = CameraManager()
+    @State private var cameraRectangle = DefaultCameraOverlayView.defaultBarcodeCutoutRect
+
     public init(barcodeData: Binding<Barcode?>) {
         self._barcodeData = barcodeData
     }
-    
-    func resetCameraCutout() {
-        withAnimation {
-            self.cameraRectangle = DefaultCameraOverlayView.defaultBarcodeCutoutRect
-        }
-    }
-    
+
     public var body: some View {
-        ZStack {
-            AnyCameraView(onBarcodeRead: { data, corners in
-                self.barcodeData = .init(data: data, corners: corners)
-            }) {
-                DefaultCameraOverlayView(rectangle: $cameraRectangle)
+        AnyCameraView(camera: camera) {
+            DefaultCameraOverlayView(rectangle: $cameraRectangle)
+        }
+        .task {
+            await camera.start()
+            for await frame in camera.frames {
+                if let barcode = await BarcodeDetector.detect(in: frame) {
+                    barcodeData = barcode
+                }
             }
+        }
+        .onDisappear {
+            camera.stop()
         }
     }
 }

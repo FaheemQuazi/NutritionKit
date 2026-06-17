@@ -1,65 +1,47 @@
 
+import os
 import SwiftUI
-import Toolbox
 
+/// A view that scans a barcode and looks up the corresponding food item from OpenFoodFacts.
 public struct FoodScannerView: View {
-    /// The current scanned food item.
+    /// The most recently scanned food item.
     @Binding var foodItem: FoodItem?
-    
-    /// Whether or not a barcode is currently being processed.
-    @State var isProcessingBarcode: Bool = false
-    
-    /// The cutout rectangle.
-    @State var cameraRectangle: CameraRect = DefaultCameraOverlayView.defaultBarcodeCutoutRect
-    
+
+    @State private var camera = CameraManager()
+    @State private var cameraRectangle = DefaultCameraOverlayView.defaultBarcodeCutoutRect
+    @State private var isProcessing = false
+
     public init(foodItem: Binding<FoodItem?>) {
         self._foodItem = foodItem
     }
-    
-    func reset() {
-        self.foodItem = nil
-        self.isProcessingBarcode = false
-        self.resetCameraCutout()
-    }
-    
-    func resetCameraCutout() {
-        withAnimation {
-            self.cameraRectangle = DefaultCameraOverlayView.defaultBarcodeCutoutRect
-        }
-    }
-    
-    func onBarcodeRead(barcode: String, corners: [CGPoint]) {
-        guard !self.isProcessingBarcode else {
-            return
-        }
-        
-        self.isProcessingBarcode = true
-        self.cameraRectangle = .init(corners[3], corners[0], corners[2], corners[1])
-        
-        Task {
-            do {
-                let data = try await OpenFoodFactsAPI.shared.find(barcode)
-                DispatchQueue.main.async {
-                    self.isProcessingBarcode = false
-                    self.foodItem = data
-                }
-            }
-            catch {
-                Log.nutritionKit.error(error.localizedDescription)
-                DispatchQueue.main.async {
-                    self.isProcessingBarcode = false
-                }
-            }
-        }
-    }
-    
+
     public var body: some View {
-        ZStack {
-            AnyCameraView(onBarcodeRead: { data, corners in
-                self.onBarcodeRead(barcode: data, corners: corners)
-            }) {
-                DefaultCameraOverlayView(rectangle: $cameraRectangle)
+        AnyCameraView(camera: camera) {
+            DefaultCameraOverlayView(rectangle: $cameraRectangle)
+        }
+        .task {
+            await camera.start()
+            for await frame in camera.frames {
+                guard foodItem == nil, !isProcessing else { continue }
+                guard let barcode = await BarcodeDetector.detect(in: frame) else { continue }
+
+                await lookUp(barcode)
             }
+        }
+        .onDisappear {
+            camera.stop()
+        }
+    }
+
+    private func lookUp(_ barcode: Barcode) async {
+        isProcessing = true
+        defer { isProcessing = false }
+
+        do {
+            foodItem = try await OpenFoodFactsAPI.shared.find(barcode.data)
+        }
+        catch {
+            Logger.nutritionKit.error("looking up food item failed: \(error.localizedDescription)")
         }
     }
 }

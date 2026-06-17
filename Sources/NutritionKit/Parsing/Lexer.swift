@@ -1,10 +1,10 @@
 
-import SwiftUI
-import Toolbox
+import CoreGraphics
+import Foundation
 
 struct Lexer {
     /// The text to parse.
-    let rawText: TextDetector.TextBox
+    let rawText: TextBox
     
     /// The language to use for parsing.
     var language: LabelLanguage = .english
@@ -70,21 +70,21 @@ struct Lexer {
     }
     
     /// Default initializer.
-    init(rawText: TextDetector.TextBox, language: LabelLanguage, handleParsedText: @escaping (CategorizedText) -> Void) {
+    init(rawText: TextBox, language: LabelLanguage, handleParsedText: @escaping (CategorizedText) -> Void) {
         self.rawText = rawText
         self.language = language
         self.handleParsedText = handleParsedText
         self.text = rawText.text.lowercased()
         self.allSpellings = Set<String>()
-        
+
         for (_, spellings) in nutritionFactLabels {
-            self.allSpellings.insert(contentsOf: spellings)
+            self.allSpellings.formUnion(spellings)
         }
         for (_, spellings) in metaLabels {
-            self.allSpellings.insert(contentsOf: spellings)
+            self.allSpellings.formUnion(spellings)
         }
         for (_, spellings) in unitSpellings {
-            self.allUnits.insert(contentsOf: spellings)
+            self.allUnits.formUnion(spellings)
         }
     }
     
@@ -322,7 +322,7 @@ struct Lexer {
         .init(description: description, rawText: self.estimateTokenPosition())
     }
     
-    private func estimateTokenPosition() -> TextDetector.TextBox {
+    private func estimateTokenPosition() -> TextBox {
         let tokenLength = self.currentOffset - self.tokenStartOffset
         let totalLength = self.rawText.text.count
         let characterWidth = self.rawText.boundingBox.width / CGFloat(totalLength)

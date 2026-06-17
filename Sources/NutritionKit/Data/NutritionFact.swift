@@ -1,7 +1,7 @@
 
 import Foundation
 
-public enum NutritionItemCategory: String {
+public enum NutritionItemCategory: String, Sendable {
     /// A macro nutrient like carbs, protein and fat.
     case macronutrient
     
@@ -15,7 +15,7 @@ public enum NutritionItemCategory: String {
     case other
 }
 
-public enum NutritionItem: String, CaseIterable {
+public enum NutritionItem: String, CaseIterable, Sendable {
     /// Total caloric content
     case calories
     

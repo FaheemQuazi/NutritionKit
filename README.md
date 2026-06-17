@@ -9,6 +9,19 @@ This library provides useful functionality for food and nutrition apps in SwiftU
 - Nutrition label scanning
 - Nutrition label rendering
 
+## Requirements
+
+- iOS 26.0+
+- Swift 6
+
+NutritionKit is built entirely on modern Apple frameworks with no third-party dependencies. It uses
+Vision's `RecognizeDocumentsRequest` for nutrition-label table extraction, `DetectBarcodesRequest`
+for barcodes, Swift Concurrency throughout, and the `@Observable` macro for the camera pipeline.
+
+Any view that uses the camera (`BarcodeScannerView`, `FoodScannerView`, `NutritionLabelScannerView`)
+requires your app to declare a `NSCameraUsageDescription` ("Privacy - Camera Usage Description") in
+its `Info.plist`, or the app will crash when the view requests camera access.
+
 #
 
 ## OpenFoodFacts Integration
@@ -27,7 +40,7 @@ print(foodItem.productName) // Prints "Nutella - 630g"
 To configure the fields you are interested in, you can use the `configure` function:
 
 ```swift
-api.configure(productFields: [.productName, .servingSize])
+await api.configure(productFields: [.productName, .servingSize])
 ```
 
 #
@@ -46,7 +59,7 @@ struct ContentView: View {
 
     var body: some View {
         BarcodeScannerView(barcodeData: $barcodeData)
-            .onChange(of: barcodeData) { data in
+            .onChange(of: barcodeData) { _, data in
                 // A barcode was detected in the camera feed
             }
     }
@@ -64,8 +77,8 @@ struct ContentView: View {
     @State var nutritionLabel: NutritionLabel? = nil
 
     var body: some View {
-        NutritionLabelScannerView(nutritionLabel: $nutritionLabel)
-            .onChange(of: nutritionLabel) { data in
+        NutritionLabelScannerView(label: $nutritionLabel)
+            .onChange(of: nutritionLabel) { _, data in
                 // A nutrition label was detected in the camera feed
             }
     }
