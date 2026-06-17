@@ -3,10 +3,15 @@ import Foundation
 
 public struct FoodItem: Sendable {
     /// The name of this product.
-    var productName: String?
-    
+    public var productName: String?
+
     /// The nutritional facts for this food item.
-    var nutrition: NutritionLabel?
+    public var nutrition: NutritionLabel?
+
+    public init(productName: String?, nutrition: NutritionLabel?) {
+        self.productName = productName
+        self.nutrition = nutrition
+    }
 }
 
 // MARK: Hashable & Codable

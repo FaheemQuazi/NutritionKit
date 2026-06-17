@@ -3,13 +3,21 @@ import Foundation
 
 public struct NutritionLabel: Sendable {
     /// The language of the label.
-    let language: LabelLanguage
-    
+    public let language: LabelLanguage
+
     /// The serving size of the label.
-    var servingSize: ServingSize?
-    
+    public var servingSize: ServingSize?
+
     /// The nutrition facts that were scanned.
-    var nutritionFacts: [NutritionItem: NutritionAmount]
+    public var nutritionFacts: [NutritionItem: NutritionAmount]
+
+    public init(language: LabelLanguage,
+                servingSize: ServingSize? = nil,
+                nutritionFacts: [NutritionItem: NutritionAmount] = [:]) {
+        self.language = language
+        self.servingSize = servingSize
+        self.nutritionFacts = nutritionFacts
+    }
 }
 
 public enum KnownLabel: String, CaseIterable, Sendable {

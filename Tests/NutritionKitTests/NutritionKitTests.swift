@@ -271,3 +271,14 @@ import UIKit
         #expect(url == "https://world.openfoodfacts.org/api/v2/product/59032823?fields=product_name,nutriments")
     }
 }
+
+// MARK: - Localization (verifies the bundled string table resolves)
+
+@Suite struct LocalizationTests {
+    @Test func resolvesNutrientNames() {
+        // If the resource bundle isn't wired up, these come back as the raw key "nutrient.…".
+        #expect(NutritionItem.calories.localizedName == "Calories")
+        #expect(NutritionItem.dietaryFiber.localizedName == "Dietary Fiber")
+        #expect(NutritionItem.addedSugar.localizedName == "Added Sugars")
+    }
+}

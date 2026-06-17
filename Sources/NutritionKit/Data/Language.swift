@@ -8,7 +8,7 @@ public enum LabelLanguage: String, Codable, Hashable, Sendable {
 extension NutritionItem: CustomStringConvertible {
     /// The localized name of this label.
     public var localizedName: String {
-        NSLocalizedString("nutrient.\(self.rawValue)", comment: "")
+        NSLocalizedString("nutrient.\(self.rawValue)", bundle: .module, comment: "")
     }
     
     public var description: String {

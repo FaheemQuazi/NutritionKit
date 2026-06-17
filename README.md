@@ -18,6 +18,10 @@ NutritionKit is built entirely on modern Apple frameworks with no third-party de
 Vision's `RecognizeDocumentsRequest` for nutrition-label table extraction, `DetectBarcodesRequest`
 for barcodes, Swift Concurrency throughout, and the `@Observable` macro for the camera pipeline.
 
+Any view that uses the camera (`BarcodeScannerView`, `FoodScannerView`, `NutritionLabelScannerView`)
+requires your app to declare a `NSCameraUsageDescription` ("Privacy - Camera Usage Description") in
+its `Info.plist`, or the app will crash when the view requests camera access.
+
 #
 
 ## OpenFoodFacts Integration

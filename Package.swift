@@ -5,6 +5,7 @@ import PackageDescription
 
 let package = Package(
     name: "NutritionKit",
+    defaultLocalization: "en",
     platforms: [
         .iOS(.v26),
     ],
@@ -16,6 +17,10 @@ let package = Package(
     targets: [
         .target(
             name: "NutritionKit",
+            resources: [
+                .process("Resources"),
+                .copy("PrivacyInfo.xcprivacy"),
+            ],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
             ]),
